@@ -1,0 +1,285 @@
+---
+title: "Exploratory Analysis - Visuals"
+author: "Evan Canfield"
+date: "5/12/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Purpose
+The following notebooks is intended for exploratory analysis in the creation of a budget projection workflow.
+
+# Import
+## Packages
+```{r import_packages}
+# Ensure package installation
+if (!require("pacman")) install.packages("pacman")
+
+# Install packages
+pacman::p_load(
+  dplyr,
+  DT,
+  ggthemes,
+  highcharter,
+  janitor,
+  lubridate,
+  plotly,
+  readxl
+)
+
+```
+
+## Data
+```{r import_data}
+start_date <- "2021-01-01"
+end_date <- "2022-06-01"
+# end_date <- NA
+
+
+projections_raw <- fund_projections(
+  start_date = start_date,
+  end_date = end_date
+  ) 
+
+projections_raw %>% head()
+```
+
+
+# Shiny App Objects
+## Categories
+```{r}
+category_filter <- category_key %>% 
+  pull(category) %>% 
+  sort()
+
+cat(category_filter)
+```
+
+## Output Table
+### Table Formatting
+```{r}
+df_table <- projections_raw %>% 
+  dplyr::filter(category == category_filter[17])
+
+  df <- df_table %>%
+  dplyr::ungroup() %>% 
+    dplyr::select( year, month, available_funds) %>% 
+    dplyr::rename(
+      Year = year,
+      Month = month,
+      'Available Funds' = available_funds
+    )
+
+df
+```
+
+### DataTable Formatting
+```{r}
+ DT::datatable(
+      data = df, 
+      fillContainer = FALSE,
+      options = list(
+        columnDefs = list(
+          list(
+            className = 'dt-center',
+            targets = "_all"
+            )
+          ),
+        lengthMenu = c(20, 50, 100),
+        pageLength = 20
+      )
+      ) %>%
+      DT::formatCurrency(
+        columns = 'Available Funds',
+        currency = '$',
+        mark = ",",
+        digits = 0
+      ) %>%
+      DT::formatRound(
+        columns = 'Year',
+        digits = 0,
+        mark = ""
+      )
+```
+
+
+## Static Plot
+### To Do
+* Dashed lines on January of every year, if not first or last month
+  * Will need a loop
+* Fix cropping of final month
+* Left Align x-axis labels
+
+### Data
+```{r}
+df_static <- projections_raw %>% 
+  dplyr::filter(category == category_filter[17])
+```
+
+### Plots
+```{r}
+p0 <- ggplot(
+  data = df_static, 
+  mapping = aes(
+    x = date, 
+    y = available_funds
+    )
+)
+
+p1 <- p0 + 
+  geom_line() + 
+  theme_minimal()
+
+p2 <- p1 + scale_x_date(
+  date_labels = if_else(
+    condition = lubridate::month(df$date) == 1,
+    true =  "%b\n%Y", 
+    false = "%b"
+    ),
+  date_breaks = "1 months",
+  # date_minor_breaks = "1 month",
+  expand = c(0,0)
+  ) + 
+  scale_y_continuous(labels=scales::dollar_format()) +
+  xlab(label = "") +
+  ylab(label = "Available Funds")
+
+p2
+```
+
+```{r}
+year_breaks <- df %>%
+  slice(2:(n()-1)) %>%         # Remove first and last rows
+  filter(month == "January") %>% 
+  mutate() %>% 
+  pull(date) %>% 
+  as.character()
+  
+p3 <- p2 + geom_vline(
+  xintercept = as.Date(year_breaks), 
+  linetype="dashed" 
+  # color = "red"
+  )
+
+p3
+```
+
+### Theme
+```{r}
+theme_custom <- function(){
+    ggplot2::theme_classic() +
+    ggplot2::theme(
+      axis.ticks = ggplot2::element_blank(),
+      axis.text.x = ggplot2::element_text(
+        hjust = 0
+        ),
+      axis.text.y = ggplot2::element_text(
+        size = 15
+        ),
+      axis.title.y = ggplot2::element_text(
+        size = 20,
+        hjust = 0.95,
+        vjust = 2
+        ),
+      plot.margin = unit(c(0, 0.5, 0, 0.5), "cm")
+    )
+}
+```
+
+```{r}
+category_key
+```
+
+
+```{r}
+p4 <- p3 + theme_custom()
+p4
+```
+
+
+```{r}
+ggplotly(p4)
+```
+
+
+## Interactive Plot
+```{r}
+category_filter
+
+df_ia <- projections_raw %>% 
+  dplyr::filter(category == category_filter[11])
+
+df_ia
+```
+
+```{r}
+
+x <- c(
+  "{point.month} {point.year}", 
+  "Available Funds"
+  )
+y <- c(
+  "",
+  "${point.available_funds:,0f}"
+  )
+
+
+tltip <- highcharter::tooltip_table(x, y)
+
+tltip
+
+highcharter::hchart(
+    df_ia,
+    "line",
+    highcharter::hcaes(
+      x = date,
+      y = available_funds
+    )
+) %>%
+  highcharter::hc_tooltip(
+    useHTML = TRUE,
+    headerFormat = "",
+    pointFormat = tltip
+    ) %>% 
+  highcharter::hc_xAxis(
+    title = list(
+      text = ""
+      ),
+    labels = list(
+      style = list(
+        fontSize = "20px"
+        )
+      )
+  ) %>% 
+  highcharter::hc_yAxis(
+    title = list(
+      text = "Available Funds",
+      style = list(
+        fontSize = "25px"
+        )
+      ),
+    labels = list(
+      format = "${value:,0f}",
+      style = list(
+        fontSize = "20px"
+        )
+      )
+  ) %>% 
+   hc_plotOptions(
+     line = list(
+       lineWidth = 5,
+       marker = list(
+         lineWidth = 1,
+         radius=7.5
+       ),
+       threshold = 0,
+       color = "#0A9396",
+       negativeColor = "#9B2226"
+     )
+   )
+
+```
+

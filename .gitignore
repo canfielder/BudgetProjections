@@ -37,3 +37,9 @@ vignettes/*.pdf
 
 # R Environment Variables
 .Renviron
+
+# Personal Financial Files
+data/*.rda
+data-raw/*.xlsx
+data-raw/*.pdf
+data-raw/*.csv

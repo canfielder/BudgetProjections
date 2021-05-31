@@ -1,0 +1,6 @@
+^renv$
+^renv\.lock$
+^BudgetProjections\.Rproj$
+^\.Rproj\.user$
+^LICENSE\.md$
+^data-raw$

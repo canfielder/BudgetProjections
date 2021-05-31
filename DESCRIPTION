@@ -1,0 +1,34 @@
+Package: BudgetProjections
+Title: Project Budget Levels
+Version: 0.0.0.9000
+Authors@R: 
+    person(given = "Evan",
+           family = "Canfield",
+           role = c("aut", "cre"),
+           email = "canfielder@gmail.com")
+Description: Project the availabl funds for select budget categories, based on
+ transactions and budget levels from Mint.com.
+License: MIT + file LICENSE
+Encoding: UTF-8
+LazyData: true
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.1.1
+Imports: 
+    dplyr,
+    DT,
+    ggplot2,
+    here,
+    highcharter,
+    janitor,
+    knitr,
+    lubridate,
+    magrittr,
+    pacman,
+    readr,
+    readxl,
+    scales,
+    shiny,
+    tidyr,
+    usethis
+Depends: 
+    R (>= 2.10)

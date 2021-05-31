@@ -1,0 +1,413 @@
+---
+title: "Exploratory Analysis"
+author: "Evan Canfield"
+date: "5/12/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Purpose
+
+The purpose of this notebook is to calculate the budget balances on January 1, 2021, and to store it as an internal and external dataset.
+
+
+# Import
+## Packages
+```{r import_packages}
+# Ensure package installation
+if (!require("pacman")) install.packages("pacman")
+
+# Install packages
+pacman::p_load(
+  dplyr,
+  janitor,
+  lubridate,
+  readxl,
+  tidyr
+)
+
+```
+
+## Data
+```{r}
+file_path <- here::here("data-raw", "budgets.xlsx")
+budget_default_raw <- readxl::read_xlsx(
+  path  = file_path,
+  sheet = "default"
+)
+```
+
+
+# Internal Datasets
+## Category Key
+```{r}
+# Load and processes the category name look-up table
+# Import ----------------------------------------------------------------------
+file_path <- here::here("data-raw", "budgets.xlsx")
+budget_default_raw <- readxl::read_xlsx(
+  path  = file_path,
+  sheet = "default"
+)
+
+# Processing ------------------------------------------------------------------
+## Wide format
+category_key <- budget_default_raw %>%
+  janitor::clean_names() %>%
+  dplyr::select(category) %>%
+  dplyr::mutate(
+    category_clean = janitor::make_clean_names(category)
+  )
+
+# Export-----------------------------------------------------------------------
+usethis::use_data(category_key, overwrite = TRUE)
+```
+
+## Transactions
+### Past
+```{r}
+# Load and process future transactions data
+
+# Import ----------------------------------------------------------------------
+## Transactions
+
+col_type_definition <- list(
+  Date =               readr::col_character(),
+  Description =        readr::col_character(),
+  Amount =             readr::col_double(),
+  `Transaction Type` = readr::col_character(),
+  Category =           readr::col_character(),
+  Note =               readr::col_character()
+)
+
+file_path <- here::here("data-raw", "transactions_future.csv")
+future_transactions_raw <- readr::read_csv(
+  file = file_path, 
+  col_types = col_type_definition
+  )
+
+# Processing ------------------------------------------------------------------
+future_transactions <- future_transactions_raw %>%
+  janitor::clean_names() %>%
+  dplyr::mutate(
+    amount = dplyr::if_else(
+      condition = transaction_type == "debit",
+      true      = as.double(amount * -1),
+      false     = as.double(amount)
+    ),
+    date = as.Date(date, "%m/%d/%Y"),
+    year = lubridate::year(date),
+    month = lubridate::month(
+      x = date,
+      label = TRUE,
+      abbr = FALSE
+    )
+  ) %>%
+  dplyr::select(date, amount, category)
+
+# Export-----------------------------------------------------------------------
+usethis::use_data(future_transactions, overwrite = TRUE)
+```
+
+### Future
+```{r}
+# Load and process transactions data
+
+# Import ----------------------------------------------------------------------
+## Transactions
+
+# Define column types
+col_type_definition <- list(
+  Date =                   readr::col_character(),
+  Description =            readr::col_character(),
+  `Original Description` = readr::col_character(),
+  Amount =                 readr::col_double(),
+  `Transaction Type` =     readr::col_character(),
+  Category =               readr::col_character(),
+  `Account Name` =         readr::col_character(),
+  Labels =                 readr::col_character(),
+  Notes =                  readr::col_character()
+)
+
+file_path <- here::here("data-raw", "transactions.csv")
+transactions_raw <- readr::read_csv(
+  file = file_path, col_types = col_type_definition
+  )
+
+## Parent / Child Budgets
+file_path <- here::here("data-raw", "budgets.xlsx")
+budgets_parent_child_raw <- readxl::read_xlsx(
+  path  = file_path,
+  sheet = "parent_child"
+  ) %>%
+  janitor::clean_names()
+
+
+# Processing ------------------------------------------------------------------
+## Define override budgets
+override_budgets <- c("Travel", "Entertainment")
+
+
+## Execute processing
+transactions <- transactions_raw %>%
+  janitor::clean_names() %>%
+  dplyr::filter(
+    account_name != "CREDITCARD Account"
+  ) %>%
+  dplyr::mutate(
+    amount =  dplyr::if_else(
+      condition = transaction_type == "debit",
+      true      = as.double(amount * -1),
+      false     = as.double(amount)
+    ),
+    date = as.Date(date, "%m/%d/%Y")
+  ) %>%
+  dplyr::select(date, amount, category) %>%
+  dplyr::left_join(
+    budgets_parent_child_raw,
+    by = c("category" = "child")
+  ) %>%
+  dplyr::mutate(
+    category =  dplyr::if_else(
+      condition = (parent %in% override_budgets),
+      true = parent,
+      false = category
+    )
+  ) %>%
+  dplyr::select(!parent)
+
+
+# Export-----------------------------------------------------------------------
+usethis::use_data(transactions, overwrite = TRUE)
+```
+
+## Budgets
+### Budgets - Monthly (Wide Format)
+```{r}
+# Load and process monthly budget levels, wide format
+# Import ----------------------------------------------------------------------
+file_path <- here::here("data-raw", "budgets.xlsx")
+budget_monthly_wide_raw <- readxl::read_xlsx(
+  path  = file_path,
+  sheet = "by_month"
+)
+
+# Processing ------------------------------------------------------------------
+## Wide format
+budget_monthly_wide <- budget_monthly_wide_raw %>%
+  janitor::clean_names() %>%
+  dplyr::select(!c("month", "year")) %>%
+  dplyr::select(date, everything())
+
+
+# Export-----------------------------------------------------------------------
+usethis::use_data(budget_monthly_wide, overwrite = TRUE)
+```
+
+### Balance on 5/15/2021
+```{r}
+# Load and process budget balances
+# Import ----------------------------------------------------------------------
+file_path <- here::here("data-raw", "budgets.xlsx")
+budget_balance_raw <- readxl::read_xlsx(
+  path  = file_path,
+  sheet = "balance"
+)
+
+# Processing ------------------------------------------------------------------
+budget_balance <- budget_balance_raw %>%
+  janitor::clean_names() %>%
+  dplyr::mutate(
+    year = lubridate::year(date),
+    month = lubridate::month(
+      x = date,
+      label = TRUE,
+      abbr = FALSE
+    )
+  ) %>%
+  dplyr::select(category, balance)
+
+
+# Export-----------------------------------------------------------------------
+usethis::use_data(budget_balance, overwrite = TRUE)
+```
+
+### Default Budget Levels
+```{r}
+# Load and budget defaults data
+
+# Import ----------------------------------------------------------------------
+file_path <- here::here("data-raw", "budgets.xlsx")
+budget_defaults_raw <- readxl::read_xlsx(
+  path  = file_path,
+  sheet = "default"
+)
+
+
+# Processing ------------------------------------------------------------------
+budget_defaults <- budget_defaults_raw %>%
+  janitor::clean_names()
+
+
+# Export-----------------------------------------------------------------------
+usethis::use_data(budget_defaults, overwrite = TRUE)
+```
+
+### Baseline Balances
+#### Define Cut-off Date
+* The cut-off date is May 15, 2021. This was when the Mint budget levels were recorded.
+* The start date is the first day of the month of the earliest recorded budget
+
+```{r define_cutoff}
+# Define start date
+start_date <- budget_monthly_wide %>%
+  dplyr::pull(date) %>%
+  min() %>%
+  as.Date()
+
+# Define cutoff date
+cutoff_date <- as.Date("2021-05-15")
+
+# Adjust Cutoff Date by a month
+cutoff_date_adj <- cutoff_date - months(1)
+
+print(paste0("Start Date: ", start_date))
+```
+
+#### Input Tables
+There are three different values we need to derive before we can complete our calculations. 
+
+* Budgeted - Pre Cut-Off: Start date through month before cut-off date
+* Budgeted - At Cut-Off: Month of cut-off
+* Spending: From start date to cut-off date
+
+##### Amount Budgeted Up to Cut-off Month
+We then calculate the amount budgeted in each categor, from the Start Date up to the Cut-off Date. We also exclude the entire month the cut-off date resides in is included in the amount budgeted.
+```{r budget_pre_cutoff}
+# Extract cleaned names as vectors
+categories_clean_vec <- category_key %>% 
+  dplyr::pull(category_clean)
+
+# Calculate the total amount budgeted in 2021 up to start of the month of the cut-off date
+budgeted_total_by_cutoff <- budget_monthly_wide %>% 
+  dplyr::filter(
+    # lubridate::year(date)  == lubridate::year(cutoff_date),
+    date <= cutoff_date_adj
+  ) %>% 
+  dplyr::select(dplyr::any_of(categories_clean_vec)) %>% 
+  tidyr::pivot_longer(
+     dplyr::everything(), 
+     names_to = "category_clean", 
+     values_to = "budget"
+     ) %>% 
+  dplyr::group_by(category_clean) %>% 
+  dplyr::summarise(budgeted_pre_cutoff = sum(budget)) %>% 
+  dplyr::left_join(
+    y = category_key, 
+    by = "category_clean"
+  ) %>% 
+  dplyr::select(category, budgeted_pre_cutoff)
+
+budgeted_total_by_cutoff
+```
+
+##### Budgets - Month of Cutoff
+```{r budget_month_of_cutoff}
+budgeted_cutoff_month <- budget_monthly_wide %>% 
+  dplyr::filter(
+    lubridate::year(date) == lubridate::year(cutoff_date),
+    lubridate::month(date) == lubridate::month(cutoff_date)
+  ) %>% 
+  dplyr::select(!date) %>% 
+  tidyr::pivot_longer(
+     dplyr::everything(), 
+     names_to = "category_clean", 
+     values_to = "budgeted_cutoff_month"
+  ) %>% 
+  dplyr::left_join(
+    y = category_key, 
+    by = "category_clean"
+  ) %>% 
+  dplyr::select(category, budgeted_cutoff_month)
+
+budgeted_cutoff_month
+```
+
+##### Spending - Up To Cut-off Day
+With our spending and budget balance tables properly derived, we will make a table that contains the spending, budgeting, and balance 
+```{r spending_cutoff}
+# Determine spending on past transactions
+category_spend <- transactions %>% 
+  dplyr::filter(
+    dplyr::between(
+      x     = date,
+      left  = start_date,
+      right = cutoff_date
+      )
+    ) %>% 
+  dplyr::group_by(category) %>% 
+  dplyr::summarise(spent = sum(amount))
+
+category_spend
+```
+
+#### Compile Budgets and Spending Tables
+```{r compile_budget_spending}
+# Compile budget balance, spending, and total budgeted
+category_summary <- category_spend %>% 
+  left_join(
+    x = budget_balance, 
+    by = "category"
+    ) %>% 
+  left_join(
+    x = budgeted_total_by_cutoff,
+    by = "category"
+    ) %>% 
+  left_join(
+    x = budgeted_cutoff_month,
+    by = "category"
+    ) %>% 
+  replace(is.na(.), 0) %>%   # Categories with no spending are NA
+  select(category, budgeted_pre_cutoff, budgeted_cutoff_month, spent, balance)
+
+category_summary
+```
+
+#### Calculate Available Funds - January 1, 2021
+```{r calculate_available_funds}
+baseline_funds <- category_summary %>% 
+  dplyr::mutate(
+    amount = budgeted_cutoff_month - balance - spent -
+      (budgeted_pre_cutoff + budgeted_cutoff_month),
+    start_date = as.Date(start_date) - days(1)
+  ) %>% 
+  dplyr::select(start_date, amount, category) %>% 
+  dplyr::rename(date = start_date)
+
+baseline_funds
+```
+
+#### Save
+```{r}
+usethis::use_data(baseline_funds,  overwrite = TRUE)
+```
+
+
+# Save to System Data
+```{r}
+usethis::use_data(
+  baseline_funds,
+  budget_balance,
+  budget_defaults,
+  budget_monthly_wide,
+  category_key,
+  future_transactions,
+  transactions,
+  internal = TRUE, 
+  overwrite = TRUE
+  )
+
+```
+

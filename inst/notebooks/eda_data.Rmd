@@ -1,0 +1,240 @@
+---
+title: "Exploratory Analysis"
+author: "Evan Canfield"
+date: "5/12/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Purpose
+The following notebooks is intended for exploratory analysis in the creation of a budget projection workflow.
+
+# Import
+## Packages
+```{r import_packages}
+# Ensure package installation
+if (!require("pacman")) install.packages("pacman")
+
+# Install packages
+pacman::p_load(
+  dplyr,
+  janitor,
+  lubridate,
+  readxl,
+  tidyr
+)
+
+# Custom Functions
+# source("./../R/processing.R")
+# source("./../R/analysis.R")
+# source("./../R/helper.R")
+# source("./../R/wrapper.R")
+```
+
+## Data
+```{r import_data}
+# Transaction data
+past_trans_raw <- import_csv("./../data/transactions.csv")
+future_trans_raw <- import_csv("./../data/transactions_future.csv")
+
+# Budget data
+past_bgt_raw <- import_xlsx("./../data/budgets.xlsx", "by_month")
+bgt_default_raw <- import_xlsx("./../data/budgets.xlsx", "default")
+bgt_parent_child_raw <- import_xlsx("./../data/budgets.xlsx", "parent_child")
+bgt_baseline <- readRDS("./../data/budget_balance_20210101.RDS")
+```
+
+# Processing
+```{r process_tables}
+# Transactions
+past_trans <- process_past_transactions(past_trans_raw, bgt_parent_child_raw)
+future_trans <- process_future_transactions(future_trans_raw)
+
+# Budgets
+category_key <- create_category_key_lookup(bgt_baseline)
+past_bgt_wide <- process_past_budgets_wide(past_bgt_raw)
+past_bgt_long <- process_past_budgets_long(past_bgt_raw, category_key)
+```
+
+# Calculations
+## Available Funds Projections
+### Define Months Up to End Date
+```{r}
+# Define end date
+end_date = as.Date("2022-12-31")
+
+# Create monthly sequence vector between end of known dates and set max date
+## Extract current date
+current_date <- past_bgt_wide %>% 
+  pull(date) %>% 
+  max() %>% 
+  as.Date()
+
+## Generate sequence
+proj_dates <- seq(
+  (current_date + months(1)), 
+  end_date, 
+  by = "month"
+  )
+```
+
+### Create Dataframe of Future Timeframe Budgets
+Create a dataframe of the future projected time frame along with the default budget values over that time frame.
+```{r}
+# Extract vector of categories
+categories_vec <- category_key %>% pull(category)
+categories_clean_vec <- category_key %>% pull(category_clean)
+
+# Define list vector
+list_future_budgets <- vector(
+  mode = "list", 
+  length = length(categories_clean_vec)  + 1
+    )
+
+
+list_labels <- c('date', categories_clean_vec)
+
+
+names(list_future_budgets) <- list_labels
+
+# Add date sequence to list
+list_future_budgets[['date']] <- proj_dates 
+
+list_future_budgets
+```
+
+```{r}
+for (budget_category in categories_vec) {
+
+  default_budget <- bgt_default_raw %>% 
+    filter(
+      category == budget_category
+    ) %>% 
+    pull(amount)
+  
+  future_budgets = rep(
+    x = default_budget,
+    times=length(proj_dates)
+  )
+  
+  list_label <- category_key %>% 
+    filter(category == budget_category) %>% 
+    pull(category_clean)
+
+  list_future_budgets[[list_label]] <- future_budgets
+  
+}
+
+future_budgets_long <- as.data.frame(list_future_budgets) %>% 
+  pivot_longer(
+    !date,
+    names_to = "category_clean",
+    values_to = "amount"
+    ) %>% 
+  left_join(
+    y = category_key,
+    by = "category_clean"
+    ) %>% 
+  select(date, amount, category)
+
+future_budgets_long
+```
+
+
+```{r}
+future_bgt_long <- future_budgets_table(
+  end_date       = "2022-12-31",
+  budget_history = past_bgt_wide,
+  budget_default = bgt_default_raw, 
+  category_key = category_key
+  )
+```
+
+
+```{r}
+start_date = "2021-01-01"
+
+# Combine budgets with past and future transactions. Filter to 2021 on onward
+all_trans <- future_trans %>% 
+  bind_rows(past_trans) %>% 
+  bind_rows(past_bgt_long) %>% 
+  bind_rows(future_bgt_long) %>% 
+  filter(
+    date >= start_date
+  ) %>% 
+  arrange(desc(date))
+
+# Add baseline balance
+all_trans <- all_trans %>% 
+  bind_rows(bgt_baseline) 
+
+available_funds_total <- all_trans %>% 
+  mutate(
+    year = year(date),
+    month = month(date, label = TRUE, abbr = FALSE)
+  ) %>% 
+  group_by(category, year, month) %>% 
+  summarise(net_spending = sum(amount)) %>% 
+  ungroup() %>% 
+  mutate(date = lubridate::mdy(
+      paste0(month, "/01/", year, sep = "")
+      )
+    ) %>% 
+  arrange(date) %>% 
+  group_by(category) %>% 
+  mutate(available_funds = cumsum(net_spending)) %>%
+  select(!net_spending) %>% 
+  arrange(category, date)
+```
+
+```{r}
+available_funds_total %>% 
+  filter(
+    year >= 2021,
+    category == "Travel"
+  )
+```
+
+```{r}
+start_date = "2021-01-01"
+end_date = "2023-01-01"
+
+funds_complete <- available_funds(
+  past_transactions       = past_trans,
+  future_transactions     = future_trans,
+  past_budgets            = past_bgt_long,
+  future_budgets          = future_bgt_long,
+  budget_balance_baseline = bgt_baseline
+)
+
+funds_complete
+
+fund_projections(
+  available_funds = funds_complete, 
+  category_key    = category_key,
+  start_date      = start_date,
+  end_date        = end_date
+)
+```
+
+# Wrapper
+```{r}
+budget_projections_wrapper(
+  path_past_transactions     = "./../data/transactions.csv",
+  path_future_transactions   = "./../data/transactions_future.csv",
+  path_past_budgets          = "./../data/budgets.xlsx",
+  sheet_past_budgets         = "by_month",
+  path_default_budgets       = "./../data/budgets.xlsx",
+  sheet_default_budgets      = "default",
+  path_parent_child_budgets  = "./../data/budgets.xlsx",
+  sheet_parent_child_budgets = "parent_child",
+  path_budget_balance        = "./../data/budget_balance_20210101.RDS",
+  start_date = "2021-01-01",
+  end_date = "2023-01-01"
+  )
+
+```
+

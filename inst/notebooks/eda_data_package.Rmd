@@ -1,0 +1,147 @@
+---
+title: "Exploratory Analysis - Package Based"
+author: "Evan Canfield"
+date: "5/12/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Import
+## Packages
+```{r import_packages}
+# Ensure package installation
+if (!require("pacman")) install.packages("pacman")
+
+# Install packages
+pacman::p_load(
+  dplyr,
+  janitor,
+  lubridate,
+  readxl,
+  tidyr
+)
+```
+
+## Data
+```{r import_data}
+# Budget data
+budgets_default <- readxl::read_xlsx(
+  path  = "./../../data-raw/budgets.xlsx",
+  sheet = "default"
+  ) 
+```
+
+# Testing
+## Category Key Look-up Table
+```{r}
+
+budgets_default %>% 
+  janitor::clean_names() %>% 
+  dplyr::select(category) %>% 
+  dplyr::mutate(
+    category_clean = janitor::make_clean_names(category)
+  )
+
+```
+
+# Package Data
+
+## Calculate Future Budgets Table
+### Function
+```{r}
+df_future <- future_budgets_table()
+df_future
+```
+
+## Calculate Available Funds
+### Step By Step
+```{r}
+ # For quieting visible binding errors in RMD check
+  amount  <- category <- future_budgets <- month <- net_spending <- year <- NULL
+
+  start_date = "2021-01-01"
+  end_date = "2021-05-31"
+  # end_date = "2021-06-01"  
+
+  # Convert end date to date type object if not NA
+  if (!is.na(end_date)) {
+    end_date = as.Date(end_date)
+  }
+
+  # Calculate future budgets - if needed
+  ## Minimum date
+  minimum_date <- end_date_cutoff()
+  if (end_date >= minimum_date){
+    future_budgets <- future_budgets_table(end_date)
+  }
+  future_budgets
+
+```
+
+```{r}
+  # Convert type
+  start_date <- as.Date(start_date)
+
+  budgets_long <- budget_monthly_long()
+
+  # Bind all tables
+  available_inputs <- transactions %>%
+    dplyr::bind_rows(future_transactions) %>%
+    dplyr::bind_rows(budgets_long) %>%
+    dplyr::bind_rows(future_budgets) %>%
+    dplyr::filter(
+      date >= start_date
+    ) %>%
+    dplyr::bind_rows(baseline_funds)
+  
+  available_inputs
+```
+
+
+```{r}
+  # Calculate available funds by year, month, category
+  available_inputs %>%
+    dplyr::mutate(
+      year = lubridate::year(date),
+      month = lubridate::month(
+        x     = date,
+        label = TRUE,
+        abbr  = FALSE
+      )
+    ) %>%
+    dplyr::group_by(category, year, month) %>%
+    dplyr::summarise(net_spending = sum(amount)) %>%
+    dplyr::ungroup() %>%
+    dplyr::mutate(date = lubridate::mdy(
+      paste0(month, "/01/", year, sep = "")
+    )
+    ) %>%
+    dplyr::arrange(date) %>%
+    dplyr::group_by(category) %>%
+    dplyr::mutate(
+      available_funds = floor(cumsum(net_spending))
+    ) %>%
+    dplyr::ungroup() %>%
+    dplyr::select(!net_spending) %>%
+    dplyr::arrange(category, date)
+```
+
+### Function
+```{r}
+start_date <- "2021-02-01"
+end_date <- "2021-05-27"
+
+df_avail <- available_funds(
+  start_date = start_date, 
+  end_date = end_date
+  )
+
+df_avail %>% 
+  filter(category == "Travel")
+```
+
+
+
