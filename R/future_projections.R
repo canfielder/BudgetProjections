@@ -17,13 +17,22 @@ fund_projections <- function(
   # For quieting visible binding errors in RMD check
   category <-   NULL
 
+  # Convert Date to first of the month
+  start_date <- paste(
+      lubridate::year(start_date),
+      lubridate::month(start_date),
+      "01",
+      sep = "-"
+    )
+
   funds <- available_funds(
     start_date = start_date,
-    end_date = end_date
+    end_date   = end_date
     )
 
   # Set dates to Date type
   start_date = as.Date(start_date)
+
   if (is.na(end_date)) {
     end_date = Sys.Date() + lubridate::years(1)
   } else {

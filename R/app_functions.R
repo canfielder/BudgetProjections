@@ -116,6 +116,7 @@ to_DT <- function(df) {
   DT::datatable(
     data = df,
     fillContainer = FALSE,
+    rownames= FALSE,
     options = list(
       columnDefs = list(
         list(
@@ -184,13 +185,13 @@ interactive_plot <- function(df) {
       ),
       labels = list(
         style = list(
-          fontSize = "20px"
+          fontSize = "14px"
         )
       )
     ) %>%
     highcharter::hc_yAxis(
       title = list(
-        text = "Available Funds",
+        text = "",
         style = list(
           fontSize = "25px"
         )
@@ -198,7 +199,15 @@ interactive_plot <- function(df) {
       labels = list(
         format = "${value:,0f}",
         style = list(
-          fontSize = "20px"
+          fontSize = "14px"
+        )
+      ),
+      plotLines = list(
+        list(
+          value = 0,
+          color = "black",
+          width = 3,
+          dashStyle = "Solid"
         )
       )
     ) %>%

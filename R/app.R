@@ -21,7 +21,7 @@ minimum_date <- as.Date("2020-11-01")
 # UI ---------------------------------------------------------------------------
 ui <- shiny::fluidPage(
     shiny::titlePanel(
-      title = "Budget Balance Projections"
+      title = "Budget Balances"
     ),
     shiny::sidebarPanel(
       width = 3,
@@ -54,6 +54,7 @@ ui <- shiny::fluidPage(
       shiny::tabsetPanel(
         shiny::tabPanel(
           title = "Plot",
+          shiny::br(),                           # Adds spacing
           highcharter::highchartOutput(
             outputId = "interactive",
             height = "700px"
@@ -65,6 +66,7 @@ ui <- shiny::fluidPage(
         #   ),
         shiny::tabPanel(
           title = "Table",
+          shiny::br(),                           # Adds spacing
           DT::DTOutput(outputId = "table")
         )
       )

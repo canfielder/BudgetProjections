@@ -375,7 +375,7 @@ category_summary <- category_spend %>%
 category_summary
 ```
 
-#### Calculate Available Funds - January 1, 2021
+#### Calculate Available Funds
 ```{r calculate_available_funds}
 baseline_funds <- category_summary %>% 
   dplyr::mutate(

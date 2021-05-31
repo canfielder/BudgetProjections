@@ -62,8 +62,10 @@ df_future
  # For quieting visible binding errors in RMD check
   amount  <- category <- future_budgets <- month <- net_spending <- year <- NULL
 
-  start_date = "2021-01-01"
-  end_date = "2021-05-31"
+  start_date <- "2020-12-01"
+  end_date <- "2021-05-31"
+  baseline_date <- sample(baseline_funds$date, 1)
+  
   # end_date = "2021-06-01"  
 
   # Convert end date to date type object if not NA
@@ -83,7 +85,15 @@ df_future
 
 ```{r}
   # Convert type
-  start_date <- as.Date(start_date)
+  start_date <- as.Date(
+      paste(
+        lubridate::year(start_date),
+        lubridate::month(start_date),
+        "01",
+        sep = "-"
+      )
+    )
+
 
   budgets_long <- budget_monthly_long()
 
@@ -93,17 +103,19 @@ df_future
     dplyr::bind_rows(budgets_long) %>%
     dplyr::bind_rows(future_budgets) %>%
     dplyr::filter(
-      date >= start_date
+      date > baseline_date
     ) %>%
     dplyr::bind_rows(baseline_funds)
   
-  available_inputs
+  available_inputs %>% 
+    filter(category == "Home Supplies") %>% 
+    arrange(date)
 ```
 
 
 ```{r}
   # Calculate available funds by year, month, category
-  available_inputs %>%
+  available_outputs <- available_inputs %>%
     dplyr::mutate(
       year = lubridate::year(date),
       month = lubridate::month(
@@ -127,6 +139,9 @@ df_future
     dplyr::ungroup() %>%
     dplyr::select(!net_spending) %>%
     dplyr::arrange(category, date)
+
+available_outputs %>% 
+  filter(category=="Home Supplies")
 ```
 
 ### Function
@@ -143,5 +158,4 @@ df_avail %>%
   filter(category == "Travel")
 ```
 
-
-
+## Fund Projections

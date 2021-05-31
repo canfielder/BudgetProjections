@@ -19,23 +19,35 @@ available_funds <- function(
   # For quieting visible binding errors in RMD check
   amount  <- category <- future_budgets <- month <- net_spending <- year <- NULL
 
+  # Dates ---------------------------------------------------------------------
+  # Define baseline date
+  baseline_date <- sample(baseline_funds$date, 1)
+
   # Convert end date to date type object if not NA
   if (!is.na(end_date)) {
     end_date = as.Date(end_date)
   }
 
-  # Calculate future budgets - if needed
-  ## Minimum date
-  minimum_date <- end_date_cutoff()
+  ## Earliest end date
+  minimum_end_date <- end_date_cutoff()
 
+  # Convert type and set to first of month
+  start_date <- as.Date(
+    paste(
+      lubridate::year(start_date),
+      lubridate::month(start_date),
+      "01",
+      sep = "-"
+    )
+  )
+
+  # Table Calculations ---------------------------------------------------------
   ## Future budgets
-  if (end_date >= minimum_date){
+  if (end_date >= minimum_end_date){
     future_budgets <- future_budgets_table(end_date)
   }
 
-  # Convert type
-  start_date <- as.Date(start_date)
-
+  # Import long form budgets
   budgets_long <- budget_monthly_long()
 
   # Bind all tables
@@ -44,7 +56,7 @@ available_funds <- function(
     dplyr::bind_rows(budgets_long) %>%
     dplyr::bind_rows(future_budgets) %>%
     dplyr::filter(
-      date >= start_date
+      date > baseline_date
     ) %>%
     dplyr::bind_rows(baseline_funds)
 

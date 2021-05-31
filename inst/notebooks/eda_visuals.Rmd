@@ -54,8 +54,6 @@ projections_raw %>% head()
 category_filter <- category_key %>% 
   pull(category) %>% 
   sort()
-
-cat(category_filter)
 ```
 
 ## Output Table
@@ -121,6 +119,8 @@ df_static <- projections_raw %>%
 
 ### Plots
 ```{r}
+df_static
+
 p0 <- ggplot(
   data = df_static, 
   mapping = aes(
@@ -133,16 +133,17 @@ p1 <- p0 +
   geom_line() + 
   theme_minimal()
 
-p2 <- p1 + scale_x_date(
-  date_labels = if_else(
-    condition = lubridate::month(df$date) == 1,
-    true =  "%b\n%Y", 
-    false = "%b"
-    ),
-  date_breaks = "1 months",
-  # date_minor_breaks = "1 month",
-  expand = c(0,0)
-  ) + 
+p2 <- p1 + 
+  # scale_x_date(
+  # date_labels = if_else(
+  #   condition = lubridate::month(df$date) == 1,
+  #   true =  "%b\n%Y", 
+  #   false = "%b"
+  #   ),
+  # date_breaks = "1 months",
+  # # date_minor_breaks = "1 month",
+  # expand = c(0,0)
+  # ) + 
   scale_y_continuous(labels=scales::dollar_format()) +
   xlab(label = "") +
   ylab(label = "Available Funds")
@@ -151,7 +152,7 @@ p2
 ```
 
 ```{r}
-year_breaks <- df %>%
+year_breaks <- df_static %>%
   slice(2:(n()-1)) %>%         # Remove first and last rows
   filter(month == "January") %>% 
   mutate() %>% 
@@ -190,15 +191,9 @@ theme_custom <- function(){
 ```
 
 ```{r}
-category_key
-```
-
-
-```{r}
 p4 <- p3 + theme_custom()
 p4
 ```
-
 
 ```{r}
 ggplotly(p4)
@@ -207,16 +202,12 @@ ggplotly(p4)
 
 ## Interactive Plot
 ```{r}
-category_filter
-
 df_ia <- projections_raw %>% 
   dplyr::filter(category == category_filter[11])
-
-df_ia
 ```
 
-```{r}
 
+```{r}
 x <- c(
   "{point.month} {point.year}", 
   "Available Funds"
@@ -250,13 +241,13 @@ highcharter::hchart(
       ),
     labels = list(
       style = list(
-        fontSize = "20px"
+        fontSize = "14px"
         )
       )
   ) %>% 
   highcharter::hc_yAxis(
     title = list(
-      text = "Available Funds",
+      text = "",
       style = list(
         fontSize = "25px"
         )
@@ -264,9 +255,17 @@ highcharter::hchart(
     labels = list(
       format = "${value:,0f}",
       style = list(
-        fontSize = "20px"
+        fontSize = "14px"
         )
-      )
+      ),
+    plotLines = list(
+        list(
+          value = 0,
+          color = "black",
+          width = 3,
+          dashStyle = "Solid"
+          )
+        )
   ) %>% 
    hc_plotOptions(
      line = list(
